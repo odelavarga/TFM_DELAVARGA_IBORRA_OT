@@ -1,0 +1,36 @@
+Habitatge,Model,Preu_Estimat
+Pis BCN centre 90m2,RandomForest,230962.62875763944
+Pis BCN centre 90m2,XGBoost,267868.15625
+Pis BCN centre 90m2,LightGBM,271355.54401124833
+Pis BCN centre 90m2,GradientBoosting,294722.6917334052
+Pis BCN centre 90m2,Lasso,463121.4511231005
+Pis BCN centre 90m2,Ridge,474260.1759679065
+Pis BCN centre 90m2,LinearRegression,474509.3226664947
+Casa Girona 150m2,RandomForest,444611.9928570938
+Casa Girona 150m2,XGBoost,458388.90625
+Casa Girona 150m2,LightGBM,463859.62991558394
+Casa Girona 150m2,GradientBoosting,504714.4268183479
+Casa Girona 150m2,Lasso,645341.7633766448
+Casa Girona 150m2,Ridge,656891.9135197677
+Casa Girona 150m2,LinearRegression,657140.0935429456
+Pis Tarragona 65m2,GradientBoosting,66774.9826852347
+Pis Tarragona 65m2,Lasso,69457.57942194014
+Pis Tarragona 65m2,LightGBM,70139.32359587983
+Pis Tarragona 65m2,XGBoost,72680.6484375
+Pis Tarragona 65m2,Ridge,80987.74510714822
+Pis Tarragona 65m2,LinearRegression,81218.46739496276
+Pis Tarragona 65m2,RandomForest,89401.56072949179
+Pis Lleida 75m2,XGBoost,47032.09375
+Pis Lleida 75m2,LightGBM,56144.99098930482
+Pis Lleida 75m2,RandomForest,57937.978083777874
+Pis Lleida 75m2,GradientBoosting,59263.907975471346
+Pis Lleida 75m2,Lasso,158121.07973607274
+Pis Lleida 75m2,Ridge,169295.20041244876
+Pis Lleida 75m2,LinearRegression,169521.37715466038
+Atico BCN Sarria 120m2,RandomForest,300170.2373870079
+Atico BCN Sarria 120m2,XGBoost,317384.75
+Atico BCN Sarria 120m2,LightGBM,380594.3865539383
+Atico BCN Sarria 120m2,GradientBoosting,416247.80961678794
+Atico BCN Sarria 120m2,Lasso,688451.5135390543
+Atico BCN Sarria 120m2,Ridge,699726.8527425085
+Atico BCN Sarria 120m2,LinearRegression,699980.5145912326

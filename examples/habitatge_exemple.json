@@ -1,0 +1,14 @@
+{
+    "metros": 90,
+    "habitaciones": 3,
+    "aseos": 2,
+    "terraza": 1,
+    "piscina": 0,
+    "garaje": 1,
+    "provincia": "Barcelona",
+    "municipio": "Barcelona",
+    "latitud": 41.3851,
+    "longitud": 2.1734,
+    "anyo": 2023,
+    "mes": 6
+}

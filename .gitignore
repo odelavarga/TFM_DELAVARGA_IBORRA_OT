@@ -1,0 +1,54 @@
+# Entorn virtual
+env/
+.env/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Data files (massa grans per a Git)
+data/*.csv
+data/*.parquet
+data/*.xlsx
+# Excepte el .gitkeep
+!data/.gitkeep
+
+# Models serialitzats (poden ser grans)
+models/*.pkl
+models/*.joblib
+models/*.json
+!models/.gitkeep
+
+# Outputs generats
+outputs/*.png
+outputs/*.pdf
+outputs/*.html
+!outputs/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
