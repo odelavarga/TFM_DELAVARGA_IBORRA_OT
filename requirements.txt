@@ -14,6 +14,9 @@ seaborn>=0.12.0
 # Explainability (XAI)
 shap>=0.44.0
 
+# Hyperparameter optimization
+optuna>=3.4.0
+
 # Jupyter notebooks
 jupyter>=1.0.0
 ipykernel>=6.0.0

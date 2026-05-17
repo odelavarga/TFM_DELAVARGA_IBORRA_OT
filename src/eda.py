@@ -6,6 +6,8 @@ Anàlisi exploratòria de dades (EDA) del mercat immobiliari de Catalunya.
 
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import seaborn as sns

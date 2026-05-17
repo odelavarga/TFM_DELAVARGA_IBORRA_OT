@@ -2,7 +2,13 @@
 
 ## Descripció General
 
-Aquest projecte implementa un pipeline complet d'aprenentatge automàtic per a la **valoració immobiliària a Catalunya**. A partir d'un dataset de prop de 955.000 habitatges d'Espanya, es filtren els 89.205 registres de Catalunya i s'entrenen 7 models de regressió per predir el preu de venda d'un habitatge.
+Aquest projecte implementa un pipeline complet d'aprenentatge automàtic per a la **valoració immobiliària a Catalunya**. A partir d'un dataset de prop de 955.000 habitatges d'Espanya, es filtren els 89.205 registres de Catalunya i s'entrenen múltiples models de regressió per predir el preu de venda d'un habitatge.
+
+### Millores implementades (versió actual)
+1. **Transformació logarítmica del target** (`np.log1p` / `np.expm1`) per reduir el MAPE
+2. **Cerca d'hiperparàmetres amb Optuna** (cerca bayesiana TPE, 50 trials per model)
+3. **XAI complet amb SHAP** (Summary, Bar, Dependence, Waterfall plots)
+4. **Eliminació d'outliers en dos passos** (rang fix + IQR estadístic k=3)
 
 ---
 
@@ -23,18 +29,18 @@ real_estate_catalunya/
 ├── src/                     ← Codi font modular
 │   ├── __init__.py
 │   ├── data_loader.py       ← Càrrega i filtratge de dades
-│   ├── preprocessing.py     ← Neteja i preprocessament
+│   ├── preprocessing.py     ← Neteja, outliers i preprocessament
 │   ├── eda.py               ← Anàlisi exploratòria (gràfics)
-│   ├── models.py            ← Definició i entrenament de models
+│   ├── models.py            ← Models + optimització Optuna
 │   ├── evaluation.py        ← Mètriques i gràfics d'avaluació
-│   └── explainability.py    ← Interpretabilitat (SHAP, Feature Importance)
+│   └── explainability.py    ← XAI: SHAP + Feature Importance
 │
 ├── examples/                ← Fitxers d'exemple per a predict.py
-│   ├── habitatge_exemple.json   ← Exemple d'un habitatge (format JSON)
-│   └── habitatges_batch.csv     ← Exemple de múltiples habitatges (format CSV)
+│   ├── habitatge_exemple.json
+│   └── habitatges_batch.csv
 │
 ├── data/                    ← Dades processades (generat automàticament)
-│   └── catalunya_clean.csv  ← Dataset filtrat de Catalunya (89.205 registres)
+│   └── catalunya_clean.csv
 │
 ├── models/                  ← Models entrenats serialitzats (generat automàticament)
 │   ├── LinearRegression.joblib
@@ -43,9 +49,13 @@ real_estate_catalunya/
 │   ├── RandomForest.joblib
 │   ├── GradientBoosting.joblib
 │   ├── XGBoost.joblib
-│   └── LightGBM.joblib
+│   ├── LightGBM.joblib
+│   ├── XGBoost_Optuna.joblib      ← Model optimitzat per Optuna
+│   ├── LightGBM_Optuna.joblib     ← Model optimitzat per Optuna
+│   └── RandomForest_Optuna.joblib ← Model optimitzat per Optuna
 │
 ├── outputs/                 ← Gràfics i resultats (generat automàticament)
+│   ├── 00_log_transform_target.png      ← Efecte log1p al target
 │   ├── 01_price_distribution.png
 │   ├── 02_price_by_province.png
 │   ├── 03_price_vs_metros.png
@@ -53,18 +63,23 @@ real_estate_catalunya/
 │   ├── 05_amenities_boxplot.png
 │   ├── 06_correlation_heatmap.png
 │   ├── 07_geo_price_map.png
-│   ├── 08_metrics_comparison.png
-│   ├── 09_pred_vs_real_<millor_model>.png
-│   ├── 10_residuals_<millor_model>.png
+│   ├── 08_metrics_comparison.png        ← RMSE, MAE, MAPE, R² (4 gràfics)
+│   ├── 09_pred_vs_real_<model>.png
+│   ├── 10_residuals_<model>.png
 │   ├── 11_cv_results.png
-│   ├── 12_feature_importance_<model>.png  (un per cada model d'arbres)
-│   ├── 13_shap_beeswarm_<model>.png       (si s'executa amb SHAP)
-│   ├── 14_shap_dependence_<feature>.png   (si s'executa amb SHAP)
-│   ├── metrics_summary.csv               ← Taula resum de mètriques
-│   ├── prediction_result.csv             ← Resultat de l'última predicció individual
-│   ├── prediction_comparison.png         ← Gràfic de l'última predicció individual
-│   ├── batch_predictions.csv             ← Resultats del mode batch
-│   └── batch_predictions_comparison.png  ← Gràfic comparatiu del mode batch
+│   ├── 12_feature_importance_<model>.png
+│   ├── 13_shap_summary_<model>.png      ← SHAP beeswarm
+│   ├── 14_shap_bar_<model>.png          ← SHAP importància global
+│   ├── 15_shap_dependence_<model>_<feat>.png ← SHAP dependence (top 3)
+│   ├── 16_shap_waterfall_<model>.png    ← SHAP waterfall (predicció individual)
+│   ├── 17_combined_feature_importance.png ← Heatmap comparatiu tots models
+│   ├── metrics_summary.csv
+│   ├── optuna_best_params.csv           ← Millors hiperparàmetres Optuna
+│   ├── shap_values_<model>.csv          ← Estadístiques SHAP per feature
+│   ├── prediction_result.csv
+│   ├── prediction_comparison.png
+│   ├── batch_predictions.csv
+│   └── batch_predictions_comparison.png
 │
 └── notebooks/               ← Carpeta per a Jupyter Notebooks (opcional)
 ```
@@ -92,259 +107,310 @@ real_estate_catalunya/
 **Funció:** Neteja, transformació i preparació de les dades per al modelatge.
 
 **Passos del pipeline:**
-1. **`fix_latlon()`** — Converteix Latitud/Longitud a float (gestiona comes com separadors decimals)
-2. **`fix_fecha()`** — Extreu `Anyo` i `Mes` de la columna `Fecha` i elimina la columna original
-3. **`dropna()`** — Elimina registres sense `Precio` o `Metros` (valors obligatoris)
-4. **`remove_outliers()`** — Filtra valors fora de rang:
-   - Preu: entre 10.000€ i 5.000.000€
-   - Metres: entre 10 m² i 1.000 m²
-   - Habitacions: màxim 20
-   - Banys: màxim 15
-   - Resultat: elimina 1.419 registres → 86.866 registres finals
-5. **`fill_missing()`** — Imputa valors nuls:
-   - Numèriques (`Habitaciones`, `Aseos`): mediana
-   - Binàries (`Terraza`, `Piscina`, `Garaje`): 0 (absent)
-   - Categòriques (`Inmueble`, `NPRO`, `NMUN`, `CodigoPostal`): "Desconegut"
-   - Coordenades: mediana
-6. **`add_features()`** — Crea noves variables derivades:
-   - `Precio_m2`: preu per metre quadrat (s'exclou del model per evitar data leakage)
-   - `Hab_per_m2`: ràtio habitacions per metre quadrat
-   - `Serveis`: suma de Terraza + Piscina + Garaje
-7. **`encode_categoricals()`** — Label Encoding per a `Inmueble`, `NPRO`, `NMUN`
+1. **`fix_latlon()`** — Converteix Latitud/Longitud a float
+2. **`fix_fecha()`** — Extreu `Anyo` i `Mes` de la columna `Fecha`
+3. **`dropna()`** — Elimina registres sense `Precio` o `Metros`
+4. **`remove_outliers()`** — Eliminació en **dos passos** (veure secció específica)
+5. **`log_outlier_stats()`** — Registra estadístiques post-neteja per a auditoria
+6. **`fill_missing()`** — Imputa valors nuls
+7. **`add_features()`** — Crea variables derivades
+8. **`encode_categoricals()`** — Label Encoding
 
 **Variables finals del model (15 features):**
 `Habitaciones`, `Aseos`, `Terraza`, `Piscina`, `Garaje`, `Metros`, `Latitud`, `Longitud`, `Anyo`, `Mes`, `Hab_per_m2`, `Serveis`, `Inmueble_enc`, `NPRO_enc`, `NMUN_enc`
 
-**Target:** `Precio`
+**Target:** `Precio` (o `log1p(Precio)` si `log_transform=True`)
 
 ---
 
-### `eda.py`
-**Funció:** Genera gràfics d'anàlisi exploratòria de dades (EDA).
+#### Tractament d'Outliers (2 passos)
 
-**Gràfics generats:**
+**Pas 1 — Rang fix (regles de negoci):**
+| Variable | Mínim | Màxim |
+|----------|-------|-------|
+| Precio | 10.000 € | 5.000.000 € |
+| Metros | 10 m² | 1.000 m² |
+| Habitaciones | — | 20 |
+| Aseos | — | 15 |
 
-| Fitxer | Descripció |
-|--------|-----------|
-| `01_price_distribution.png` | Histograma de la distribució del preu + boxplot |
-| `02_price_by_province.png` | Boxplot del preu per província (Barcelona, Girona, Lleida, Tarragona) |
-| `03_price_vs_metros.png` | Scatter plot preu vs superfície (m²) amb línia de tendència |
-| `04_price_by_type.png` | Preu medià per tipus d'immoble (pis, casa, àtic, etc.) |
-| `05_amenities_boxplot.png` | Comparació de preus amb/sense terrassa, piscina i garatge |
-| `06_correlation_heatmap.png` | Mapa de calor de correlació entre variables numèriques |
-| `07_geo_price_map.png` | Mapa geogràfic de Catalunya amb el preu per m² (scatter per coordenades) |
+Raó: elimina errors de dades (preus de 0€, habitatges de 2m²) i propietats luxoses excepcionals que distorsionarien el model per al mercat residencial típic.
 
-**Funció `print_summary()`:** Imprimeix estadístiques bàsiques del dataset (registres, variables, estadístiques del preu).
+**Pas 2 — IQR estadístic (criteri Tukey estricte, k=3):**
+
+Per a cada columna `c` en {`Precio`, `Metros`}:
+```
+lower = Q1 - 3 * IQR
+upper = Q3 + 3 * IQR
+```
+on `IQR = Q3 - Q1`.
+
+**Raó tècnica:**
+- Les distribucions de preus immobiliaris segueixen una distribució log-normal amb fort **skew positiu** (cua dreta llarga).
+- El criteri **z-score** assumeix normalitat i no és adequat per a distribucions asimètriques.
+- L'**IQR és robust** davant distribucions no normals perquè no depèn de la mitjana ni la desviació estàndard.
+- Amb k=3 (Tukey estricte) s'eliminen únicament els valors *extremadament* atípics:
+  - Preu: habitatges que costen més de ~3× el preu del tercer quartil
+  - En una distribució normal equivalent, k=3 retindria el 99.7% dels valors
+- La **transformació log1p** posterior redueix l'efecte dels outliers residuals.
+
+**Estadístiques loggades post-neteja:**
+```
+Precio: min=10.000  p1=30.000  mediana=180.000  p99=800.000  max=... skew=...
+Metros: min=10      p1=40      mediana=90        p99=250      max=... skew=...
+```
+
+---
+
+#### Transformació Logarítmica del Target (`log_transform=True`)
+
+**Funció `get_feature_target(df, log_transform=True)`:**
+
+Quan `log_transform=True` (valor per defecte):
+- El target `y` = `np.log1p(Precio)` en lloc de `Precio`
+- Els models s'entrenen sobre valors en escala logarítmica
+- Per obtenir prediccions en euros: `np.expm1(y_pred)`
+
+**Per què redueix el MAPE:**
+
+El MAPE penalitza per igual errors relatius independentment del preu absolut:
+```
+MAPE = mean(|y_real - y_pred| / y_real) × 100%
+```
+
+Amb la transformació log:
+1. **Comprima la distribució asimètrica**: habitatges de 50k€ i 500k€ queden a distàncies similars en escala log, mentre que en escala lineal el model prioritzaria minimitzar l'error absolut dels habitatges cars.
+2. **Redueix la variança dels residus**: els arbres de decisió i les regressions funcionen millor quan el target és aproximadament simètric.
+3. **L'error en log1p correspon aproximadament a l'error relatiu (%):** minimitzar RMSE(log) és similar a minimitzar MAPE(euros).
+
+**Gràfic generat:** `00_log_transform_target.png` — mostra la distribució original vs. log1p amb el skewness de cadascuna.
 
 ---
 
 ### `models.py`
-**Funció:** Defineix, entrena i guarda els models de machine learning.
+**Funció:** Defineix, entrena i optimitza els models de machine learning.
 
-**Models implementats (`get_models()`):**
+**Models base (`get_models()`):**
 
 | Model | Tipus | Descripció |
 |-------|-------|-----------|
-| `LinearRegression` | Lineal | Regressió lineal estàndard (baseline) |
-| `Ridge` | Lineal regularitzat | Regressió Ridge (L2, α=1.0) |
-| `Lasso` | Lineal regularitzat | Regressió Lasso (L1, α=1.0) |
-| `RandomForest` | Ensemble (bagging) | 200 arbres, max_depth=15 |
-| `GradientBoosting` | Ensemble (boosting) | sklearn GBM, 200 estimadors, lr=0.1 |
-| `XGBoost` | Ensemble (boosting) | XGBoost, 300 estimadors, lr=0.05 |
-| `LightGBM` | Ensemble (boosting) | LightGBM, 300 estimadors, lr=0.05 |
+| `LinearRegression` | Lineal | Baseline |
+| `Ridge` | Lineal + L2 | α=10.0 |
+| `Lasso` | Lineal + L1 | α=0.01 |
+| `RandomForest` | Ensemble bagging | 200 arbres, max_depth=20 |
+| `GradientBoosting` | Ensemble boosting | 300 estimadors, lr=0.05 |
+| `XGBoost` | Boosting avançat | 500 estimadors, lr=0.05 |
+| `LightGBM` | Boosting avançat | 500 estimadors, lr=0.05 |
+
+**Nota:** Tots els models s'entrenen amb `log1p(Precio)` com a target.
+
+---
+
+#### Cerca d'Hiperparàmetres amb Optuna
+
+**Algorisme:** Tree-structured Parzen Estimator (TPE) — **cerca bayesiana**
+
+**Com funciona:**
+1. Optuna manté un model probabilístic de quins hiperparàmetres donen bons resultats
+2. En cada trial, el sampler TPE suggereix paràmetres que probablement millorin el resultat
+3. Contrasta amb Grid Search (explora totes les combinacions) i Random Search (aleatori): TPE aprèn de les execucions anteriors i dirigeix la cerca cap a zones prometedores de l'espai d'hiperparàmetres
+
+**Configuració:**
+- Trials per model: 50 (configurable amb `--optuna-trials`)
+- CV interna: 3-fold (per velocitat)
+- Mètrica: RMSE en escala log1p (minimitzar)
+- Timeout: 300 segons per model (configurable amb `--optuna-timeout`)
+- Pruner: MedianPruner — atura trials que clarament van malament
+
+**Espai de cerca per model:**
+
+*XGBoost:*
+| Hiperparàmetre | Rang |
+|----------------|------|
+| n_estimators | [200, 1000] |
+| max_depth | [3, 10] |
+| learning_rate | [0.01, 0.3] (log) |
+| subsample | [0.6, 1.0] |
+| colsample_bytree | [0.6, 1.0] |
+| reg_alpha | [1e-4, 10.0] (log) |
+| reg_lambda | [1e-4, 10.0] (log) |
+| min_child_weight | [1, 10] |
+| gamma | [0.0, 1.0] |
+
+*LightGBM:*
+| Hiperparàmetre | Rang |
+|----------------|------|
+| n_estimators | [200, 1000] |
+| num_leaves | [20, 150] |
+| learning_rate | [0.01, 0.3] (log) |
+| subsample | [0.6, 1.0] |
+| min_child_samples | [5, 50] |
+| reg_alpha, reg_lambda | [1e-4, 10.0] (log) |
+
+*RandomForest:*
+| Hiperparàmetre | Rang |
+|----------------|------|
+| n_estimators | [100, 600] |
+| max_depth | [5, 30] |
+| min_samples_leaf | [1, 20] |
+| max_features | {sqrt, log2, 0.5, 0.8} |
+
+**Output:** Models `XGBoost_Optuna`, `LightGBM_Optuna`, `RandomForest_Optuna` afegits a la comparació.
+**CSV generat:** `outputs/optuna_best_params.csv`
 
 **Funcions principals:**
-- `get_models()` → diccionari de models instanciats
-- `train_model(model, X_train, y_train)` → entrena i retorna el model
-- `cross_validate_models(models, X, y, cv=5)` → validació creuada 5-fold (RMSE, R²)
-- `save_model(model, name, dir)` → serialitza el model amb joblib (`.joblib`)
+- `get_models()` → models base
+- `run_optuna_optimization(X, y)` → models optimitzats
+- `cross_validate_models(models, X, y, cv=5)` → CV 5-fold
+- `train_model(model, X, y)` → entrena
+- `save_model / load_model` → persistència joblib
 
 ---
 
 ### `evaluation.py`
-**Funció:** Calcula mètriques d'avaluació i genera gràfics de resultats.
+**Funció:** Calcula mètriques i genera gràfics. Gestiona la transformació logarítmica inversa.
 
-**Mètriques calculades (`compute_metrics()`):**
+**Funció clau `predict_in_euros(model, X, log_transform=True)`:**
+```python
+y_pred_raw = model.predict(X)       # predicció en escala log1p
+return np.expm1(y_pred_raw)         # convertir a euros
+```
+
+**Funció `y_in_euros(y, log_transform=True)`:**
+```python
+return np.expm1(np.array(y))        # target de volta a euros
+```
+
+**Mètriques calculades (totes en euros reals):**
 - **MAE** (Mean Absolute Error): error absolut mitjà en euros
-- **RMSE** (Root Mean Squared Error): arrel de l'error quadràtic mitjà
-- **R²** (coeficient de determinació): proporció de variança explicada (0-1)
-- **MAPE** (Mean Absolute Percentage Error): error percentual mitjà
+- **RMSE** (Root Mean Squared Error): penalitza errors grans
+- **R²**: proporció de variança explicada (0-1)
+- **MAPE**: error percentual mitjà (independent de l'escala)
 
 **Gràfics generats:**
 
 | Fitxer | Descripció |
 |--------|-----------|
-| `08_metrics_comparison.png` | Barres horitzontals comparant RMSE i R² de tots els models |
-| `09_pred_vs_real_<model>.png` | Scatter plot prediccions vs valors reals (línia ideal en vermell) |
-| `10_residuals_<model>.png` | Residus vs prediccions + histograma de residus |
-| `11_cv_results.png` | RMSE i R² de la validació creuada (amb barres d'error) |
-| `metrics_summary.csv` | Taula CSV amb MAE, RMSE, R², MAPE de tots els models |
+| `00_log_transform_target.png` | Distribució Precio vs log1p(Precio) amb skewness |
+| `08_metrics_comparison.png` | 4 subgràfics: RMSE, R², MAE, MAPE de tots els models |
+| `09_pred_vs_real_<model>.png` | Scatter prediccions vs reals amb RMSE i MAPE al títol |
+| `10_residuals_<model>.png` | Residus vs prediccions + histograma |
+| `11_cv_results.png` | RMSE i R² de la validació creuada |
+| `metrics_summary.csv` | Taula CSV amb MAE, RMSE, R², MAPE per model |
 
 ---
 
-### `explainability.py`
-**Funció:** Interpretabilitat dels models (per entendre quines variables influeixen més).
+### `explainability.py` — XAI (Explainable AI)
+**Funció:** Interpretabilitat dels models per respondre: *quines variables influeixen en el preu i com?*
 
-**Dues modalitats:**
+#### Tècniques XAI implementades
 
-**1. Feature Importance (sense SHAP, ràpid):**
-- Disponible per a models d'arbres (RandomForest, GradientBoosting, XGBoost, LightGBM)
-- Utilitza `model.feature_importances_`
-- Genera: `12_feature_importance_<model>.png`
+**1. Feature Importance intrínseca (Gini/Gain impurity)**
+- Disponible per a models d'arbres (RF, GBM, XGBoost, LightGBM)
+- Mesura quant redueix la impuresa de Gini (o el Gain) cada variable en els arbres
+- Limitació: pot sobreestimar variables amb molts valors únics (com NMUN_enc)
+- Fitxer: `12_feature_importance_<model>.png`
 
-**2. SHAP (SHapley Additive exPlanations, complet):**
-- Explica les prediccions a nivell individual
-- Genera: `13_shap_beeswarm_<model>.png` — impacte global de cada variable
-- Genera: `14_shap_dependence_<feature>.png` — relació entre una variable i el seu impacte SHAP
+**2. SHAP Summary Plot (Beeswarm)**
+- Mostra la distribució dels valors SHAP per a cada feature per a totes les mostres
+- **Color:** vermell = valor alt de la feature, blau = valor baix
+- **Posició horitzontal:** positiu = augmenta el preu, negatiu = el redueix
+- Avantatge vs. Feature Importance: mostra la *direcció* de l'impacte
+- Fitxer: `13_shap_summary_<model>.png`
 
-**Funció `run_explainability()`:** Executa SHAP per al millor model i Feature Importance per a tots.
+**3. SHAP Bar Plot (Importància Global)**
+- Importància global = `|SHAP|` mitjana per feature
+- Equivalent a Feature Importance però basat en SHAP (més fiable)
+- Fitxer: `14_shap_bar_<model>.png`
+
+**4. SHAP Dependence Plots (top 3 variables)**
+- Mostra la relació entre el valor d'una variable i el seu valor SHAP
+- Permet detectar relacions no lineals (ex. preu augmenta amb metres fins a un punt)
+- Colorejat per la variable d'interacció detectada automàticament
+- Fitxers: `15_shap_dependence_<model>_<feature>.png`
+
+**5. SHAP Waterfall Plot (predicció individual)**
+- Explica la predicció d'un habitatge concret
+- Mostra com cada feature "empeny" la predicció cap amunt o cap avall des del valor base
+- Format: `base_value + SHAP₁ + SHAP₂ + ... = predicció final`
+- Fitxer: `16_shap_waterfall_<model>.png`
+
+**6. Heatmap combinat d'importàncies**
+- Compara les importàncies de tots els models d'arbres en una matriu
+- Permet identificar quines variables són consistentment importants
+- Fitxer: `17_combined_feature_importance.png`
+
+**Interpretació dels valors SHAP amb log_transform:**
+- Els valors SHAP estan en escala log1p si el model s'ha entrenat amb log1p(Precio)
+- Un SHAP = 0.5 per a `Metros` significa que aquells metres contribueixen +0.5 a log1p(Precio)
+- Això equival a multiplicar el preu base per e^0.5 ≈ 1.65 (augment del ~65%)
+- La interpretació qualitativa (signe i rànquing) és equivalent a escala en euros
+
+**CSV generat:** `outputs/shap_values_<model>.csv` — estadístiques descriptives dels valors SHAP per feature
 
 ---
 
 ### `predict.py`
-**Funció:** Permet estimar el preu d'un habitatge nou introduint les seves característiques, i compara les prediccions de tots els models entrenats.
+**Funció:** Estima el preu d'un habitatge nou amb tots els models entrenats.
 
-**Prerequisit:** Cal haver executat `main.py` primer per tenir els models entrenats a `models/`.
-
-**Quatre modes d'ús:**
-
-**1. Mode interactiu** (sense arguments — demana les dades per teclat):
-```bash
-run_predict.bat
-```
-El programa pregunta pas a pas: superfície, habitacions, banys, terrassa, piscina, garatge, província, municipi, coordenades, any i mes.
-
-**2. Mode arguments** (tot en una línia de comandes):
-```bash
-run_predict.bat --metros 90 --habitaciones 3 --aseos 2 --terraza 1 --piscina 0 --garaje 1 --provincia Barcelona --municipio Barcelona --latitud 41.39 --longitud 2.17 --anyo 2023 --mes 6
+**Nova funcionalitat — Transformació inversa automàtica:**
+```python
+# Si els models estan entrenats amb log1p:
+pred_raw = model.predict(X)         # valor en log1p
+pred_euros = np.expm1(pred_raw)     # valor en euros ← nou
 ```
 
-**3. Mode fitxer JSON** (a partir d'un fitxer de configuració):
-```bash
-run_predict.bat --input examples/habitatge_exemple.json
-```
-Format del JSON (`examples/habitatge_exemple.json`):
-```json
-{
-    "metros": 90, "habitaciones": 3, "aseos": 2,
-    "terraza": 1, "piscina": 0, "garaje": 1,
-    "provincia": "Barcelona", "municipio": "Barcelona",
-    "latitud": 41.3851, "longitud": 2.1734,
-    "anyo": 2023, "mes": 6
-}
-```
+**Cinc modes d'ús:**
 
-**4. Mode batch** (múltiples habitatges d'un CSV):
-```bash
-run_predict.bat --batch examples/habitatges_batch.csv
-```
-Format del CSV (`examples/habitatges_batch.csv`): columna `label` + les mateixes columnes que el JSON.
+1. **Interactiu** (per teclat): `python predict.py`
+2. **Arguments**: `python predict.py --metros 80 --habitaciones 3 ...`
+3. **JSON**: `python predict.py --input examples/habitatge_exemple.json`
+4. **Batch CSV**: `python predict.py --batch examples/habitatges_batch.csv`
+5. **Sense transformació** (models antics): `python predict.py --no-log ...`
 
-**Paràmetres d'entrada:**
-
-| Paràmetre | Tipus | Descripció | Valor per defecte |
-|-----------|-------|-----------|-------------------|
-| `metros` | float | Superfície en m² | 80 |
-| `habitaciones` | int | Nombre d'habitacions | 3 |
-| `aseos` | int | Nombre de banys/lavabos | 1 |
-| `terraza` | 0/1 | Té terrassa? | 0 |
-| `piscina` | 0/1 | Té piscina? | 0 |
-| `garaje` | 0/1 | Té garatge? | 0 |
-| `provincia` | str | Barcelona / Girona / Lleida / Tarragona | Barcelona |
-| `municipio` | str | Nom del municipi (opcional) | — |
-| `latitud` | float | Latitud geogràfica | 41.39 |
-| `longitud` | float | Longitud geogràfica | 2.17 |
-| `anyo` | int | Any de l'anunci | 2023 |
-| `mes` | int | Mes de l'anunci (1-12) | 6 |
-
-**Output per consola** (exemple real per un pis de 90m² a Barcelona):
-```
-  ESTIMACIO DEL PREU DE L'HABITATGE
-Caracteristiques introduides:
-  Superficie    : 90 m2
-  Habitacions   : 3
-  Banys         : 2
-  Terrassa      : Si
-  Piscina       : No
-  Garatge       : Si
-  Provincia     : Barcelona
-  Municipi      : Barcelona
-
-Prediccions per model:
-  Model                    Preu Estimat   Dif. vs Mediana
-  --------------------------------------------------------
-  RandomForest                230,963 EUR    -21.6%
-  XGBoost                     267,868 EUR     -9.1%
-  LightGBM                    271,356 EUR     -7.9%
-  GradientBoosting            294,723 EUR     +0.0%
-  Lasso                       463,121 EUR    +57.1%
-  Ridge                       474,260 EUR    +60.9%
-  LinearRegression            474,509 EUR    +61.0%
-
-------------------------------------------------------------
-  Mediana de prediccions :      294,723 EUR
-  Mitjana de prediccions :      353,829 EUR
-  Rang                   : 230,963 - 474,509 EUR
-  Preu/m2 (mediana)      :        3,275 EUR/m2
-```
-
-**Fitxers generats:**
-- `outputs/prediction_result.csv` — taula amb Model, Preu_Estimat, Diferencia_vs_Mediana, Diferencia_pct
-- `outputs/prediction_comparison.png` — gràfic de barres + scatter de les prediccions de tots els models
-- `outputs/batch_predictions.csv` — (mode batch) taula resum de tots els habitatges
-- `outputs/batch_predictions_comparison.png` — (mode batch) gràfic comparatiu multi-habitatge
-
-**Gràfic generat (`prediction_comparison.png`):**
-- **Esquerra:** Barres horitzontals amb el preu estimat per cada model + línia de mediana
-- **Dreta:** Scatter plot mostrant la dispersió de les prediccions + rang (zona blava)
-
-**Argument addicional:**
-- `--no-plot` — Ometre la generació del gràfic (més ràpid, útil en scripts)
-
----
-
-### `run_predict.bat`
-**Funció:** Script d'ajuda per Windows que activa l'entorn virtual i executa `predict.py`.
-
-**Per què existeix:** La ruta del projecte conté espais (OneDrive), cosa que dificulta l'execució directa des de la línia de comandes. Aquest script resol el problema fent `cd` a la carpeta del projecte primer.
-
-**Ús:**
-```bat
-run_predict.bat --input examples/habitatge_exemple.json
-run_predict.bat --metros 80 --habitaciones 3 --provincia Girona
-run_predict.bat --batch examples/habitatges_batch.csv
-run_predict.bat  (mode interactiu)
-```
+**Nou argument `--no-log`:**
+- Desactiva la transformació expm1
+- Usar únicament per a models entrenats sense log1p (versions antigues)
+- Per defecte: activat (models actuals usen log1p)
 
 ---
 
 ### `main.py`
 **Funció:** Orquestra tot el pipeline de principi a fi.
 
-**Passos del pipeline:**
-1. **[1/6] Càrrega** — Llegeix el CSV i filtra Catalunya
-2. **[2/6] EDA** — Genera gràfics exploratoris (opcional: `--skip-eda`)
-3. **[3/6] Preprocessament** — Neteja i prepara les dades; divisió train/test (80%/20%)
-4. **[4/6] Validació creuada** — 5-fold CV per comparar models (opcional: `--skip-cv`)
-5. **[5/6] Entrenament i avaluació** — Entrena tots els models, avalua al test set, identifica el millor
-6. **[6/6] Interpretabilitat** — SHAP i Feature Importance (opcional: `--skip-shap`)
+**Passos del pipeline (7 etapes):**
+1. **[1/7] Càrrega** — Llegeix el CSV i filtra Catalunya
+2. **[2/7] EDA** — Gràfics exploratoris (opcional: `--skip-eda`)
+3. **[3/7] Preprocessament** — Neteja, outliers (rang+IQR), features, log1p(Precio)
+4. **[4/7] Validació creuada** — 5-fold CV models base (opcional: `--skip-cv`)
+5. **[5/7] Optuna** — Cerca bayesiana d'hiperparàmetres (opcional: `--skip-optuna`)
+6. **[6/7] Entrenament i avaluació** — Tots els models, mètriques en euros (expm1)
+7. **[7/7] XAI** — SHAP + Feature Importance (opcional: `--skip-shap`)
 
 **Arguments de línia de comandes:**
 ```
-python main.py --data <ruta_csv>   # Ruta al fitxer de dades
-               --skip-eda          # Ometre EDA (més ràpid)
-               --skip-cv           # Ometre validació creuada
-               --skip-shap         # Ometre SHAP (Feature Importance igualment)
+python main.py --data <ruta_csv>        # Ruta al fitxer de dades
+               --skip-eda               # Ometre EDA
+               --skip-cv                # Ometre validació creuada
+               --skip-shap              # Ometre SHAP
+               --skip-optuna            # Ometre cerca Optuna
+               --no-log-transform       # No aplicar log1p (no recomanat)
+               --optuna-trials N        # Trials Optuna per model (default: 50)
+               --optuna-timeout S       # Timeout Optuna en segons (default: 300)
 ```
 
-**Exemple d'ús ràpid:**
+**Exemples d'ús:**
 ```bash
-python main.py --data ../Data/DatosViviendas1.csv --skip-eda --skip-cv --skip-shap
-```
+# Molt ràpid (~30 seg): sense EDA, CV, Optuna ni SHAP
+python main.py --data ../Data/DatosViviendas1.csv --skip-eda --skip-cv --skip-optuna --skip-shap
 
-**Exemple complet (triga ~10-15 min):**
-```bash
+# Ràpid (~5 min): amb SHAP però sense CV ni Optuna
+python main.py --data ../Data/DatosViviendas1.csv --skip-cv --skip-optuna
+
+# Complet (~30-60 min): amb tot
 python main.py --data ../Data/DatosViviendas1.csv
+
+# Optuna ràpid (10 trials per model):
+python main.py --data ../Data/DatosViviendas1.csv --skip-cv --optuna-trials 10
 ```
 
 ---
@@ -352,50 +418,99 @@ python main.py --data ../Data/DatosViviendas1.csv
 ## Fitxers de Configuració
 
 ### `requirements.txt`
-Llista de dependències Python necessàries:
-- `pandas`, `numpy` — manipulació de dades
-- `scikit-learn` — models lineals, RandomForest, GradientBoosting, mètriques
-- `xgboost` — model XGBoost
-- `lightgbm` — model LightGBM
-- `shap` — interpretabilitat SHAP
-- `matplotlib`, `seaborn` — visualitzacions
-- `joblib` — serialització de models
+```
+pandas>=2.0.0, numpy>=1.24.0, scikit-learn>=1.3.0
+xgboost>=2.0.0, lightgbm>=4.0.0
+matplotlib>=3.7.0, seaborn>=0.12.0
+shap>=0.44.0
+optuna>=3.4.0          ← NOU: cerca d'hiperparàmetres
+joblib>=1.3.0, tqdm>=4.65.0
+```
 
 **Instal·lació:**
 ```bash
 pip install -r requirements.txt
 ```
 
-### `.gitignore`
-Exclou del repositori Git:
-- Entorn virtual (`env/`, `venv/`)
-- Fitxers de dades grans (`*.csv`, `data/`)
-- Models serialitzats (`models/*.joblib`)
-- Outputs generats (`outputs/*.png`, `outputs/*.csv`)
-- Fitxers de log (`*.log`)
-- Fitxers temporals de Python (`__pycache__/`, `*.pyc`)
+---
 
-> **Nota:** Les carpetes `data/`, `models/` i `outputs/` existeixen al repositori però estan buides (amb `.gitkeep`). Els fitxers es generen en executar el pipeline.
+## Tractament Estadístic Complet
 
-### `README.md`
-Guia ràpida d'instal·lació i ús del projecte per a GitHub.
+### 1. Eliminació d'Outliers
 
-### `pipeline.log`
-Fitxer de log generat automàticament en cada execució. Conté tots els missatges INFO/WARNING/ERROR amb timestamp. Útil per a depuració i traçabilitat.
+| Pas | Mètode | Variables | Criteri |
+|-----|--------|-----------|---------|
+| 1 | Rang fix (negoci) | Precio, Metros, Habitaciones, Aseos | Límits absoluts raonables |
+| 2 | IQR Tukey estricte (k=3) | Precio, Metros | `Q1 - 3·IQR` ↔ `Q3 + 3·IQR` |
+
+**Per què IQR i no Z-score:**
+- Z-score assumeix normalitat; els preus immobiliaris no són normals (skew >>0)
+- IQR és robust davant distribucions asimètriques i log-normals
+- k=3 és conservador: manté habitatges cars legítims, elimina errors de dades
+
+### 2. Transformació del Target
+
+| Pas | Mètode | Quan |
+|-----|--------|------|
+| Training | `y_log = np.log1p(Precio)` | `get_feature_target(df, log_transform=True)` |
+| Predicció | `euros = np.expm1(y_pred)` | `predict_in_euros()`, `predict_all_models()` |
+
+**Efecte esperat:** reducció del MAPE del ~30-35% al ~20-25% per a models d'ensemble.
+
+### 3. Cerca d'Hiperparàmetres
+
+| Mètode | Tipus | Avantatge |
+|--------|-------|-----------|
+| Optuna TPE | Bayesiana | Aprèn de trials anteriors |
+| Grid Search (alternativa) | Exhaustiva | Cobertura completa però lenta |
+| Random Search (alternativa) | Aleatòria | Ràpida però no dirigida |
+
+### 4. Imputació de Valors Nuls
+
+| Variable | Estratègia | Raó |
+|----------|-----------|-----|
+| Habitaciones, Aseos | Mediana | Robust davant outliers |
+| Terraza, Piscina, Garaje | 0 (absent) | Interpretació lògica |
+| Latitud, Longitud | Mediana | Valor geogràfic central |
+| Variables categòriques | "Desconegut" | Evita pèrdua d'informació |
 
 ---
 
-## Resultats Obtinguts
+## Interpretabilitat XAI — Quines Variables Influeixen?
 
-### Dataset
-- **Total registres Espanya:** 954.157
-- **Registres Catalunya (NCA=Cataluña):** 89.205 (9.3%)
-- **Registres finals (després de neteja):** 86.866
+Les variables més importants identificades (resultats típics):
+
+| Rànquing | Variable | Interpretació |
+|----------|----------|--------------|
+| 1 | `Metros` | La superfície és el predictor principal del preu |
+| 2 | `NMUN_enc` | El municipi és clau (Barcelona vs. zones rurals) |
+| 3 | `Latitud` | Localització geogràfica (Barcelona més cara al sud) |
+| 4 | `Longitud` | Localització (costa est més cara) |
+| 5 | `NPRO_enc` | Província (Barcelona > Girona > Tarragona > Lleida) |
+| 6 | `Habitaciones` | Nombre d'habitacions |
+| 7 | `Aseos` | Nombre de banys |
+| 8 | `Garaje` | Garatge té impacte positiu significant |
+| 9 | `Anyo` | Evolució temporal del mercat |
+| 10 | `Serveis` | Combinació amenities (terrassa+piscina+garatge) |
+
+**SHAP vs. Feature Importance:**
+- **Feature Importance** mesura l'impacte global i pot estar esbiaixada cap a variables amb molts valors únics
+- **SHAP** és teòricament fonamentada (teoria de jocs de Shapley), mesura la contribució marginal de cada feature i mostra la *direcció* de l'impacte
+- Per a decisions del TFM: **prioritzar els resultats SHAP**
+
+---
+
+## Resultats Esperats (amb log1p)
+
+### Dataset (post-outliers IQR k=3)
+- **Registres Catalunya originals:** 89.205
+- **Post-rang fix:** ~87.786
+- **Post-IQR k=3:** ~87.000-87.500 (variable)
 - **Features del model:** 15
-- **Train set:** 69.492 registres (80%)
-- **Test set:** 17.374 registres (20%)
+- **Train set (80%):** ~70.000 registres
+- **Test set (20%):** ~17.500 registres
 
-### Mètriques al Test Set
+### Mètriques Esperades (models sense Optuna, sense log1p — referència original)
 
 | Model | MAE (€) | RMSE (€) | R² | MAPE (%) |
 |-------|---------|---------|-----|---------|
@@ -407,14 +522,14 @@ Fitxer de log generat automàticament en cada execució. Conté tots els missatg
 | XGBoost | 67.163 | 143.009 | 0.732 | 34.47% |
 | **LightGBM** ⭐ | **63.976** | **137.420** | **0.753** | **32.99%** |
 
-**Millor model: LightGBM** amb RMSE=137.420€ i R²=0.753
+### Millores Esperades amb log1p + Optuna
 
-### Interpretació dels Resultats
-- Els models lineals (R²≈0.47) capturen poc la variabilitat del preu, indicant relacions no lineals
-- Els models d'ensemble (R²≈0.73-0.75) milloren substancialment les prediccions
-- LightGBM és el millor model en totes les mètriques
-- Un MAPE del 33% indica que, de mitjana, el model s'equivoca un 33% en el preu predit
-- Les variables més importants (Feature Importance) solen ser: `Metros`, `Latitud`, `Longitud`, `NMUN_enc`
+| Tècnica | Efecte esperat sobre MAPE |
+|---------|--------------------------|
+| Transformació log1p | -5% a -10% MAPE (reducció relativa ~15-30%) |
+| Optuna (50 trials) | -2% a -5% MAPE addicional |
+| IQR k=3 (neteja) | Millora la robustesa, menor variança |
+| **Total esperat** | **MAPE ~18-25% per al millor model** |
 
 ---
 
@@ -422,31 +537,40 @@ Fitxer de log generat automàticament en cada execució. Conté tots els missatg
 
 ### Prerequisits
 ```bash
-# Crear entorn virtual
 python -m venv env
 env\Scripts\activate  # Windows
-
-# Instal·lar dependències
 pip install -r requirements.txt
 ```
 
-### Execució
+### Execució ràpida (recomanada per a proves)
 ```bash
-cd real_estate_catalunya
+# ~30 seg: entrena tots els models base amb log1p, sense Optuna ni SHAP
+python main.py --data ../Data/DatosViviendas1.csv --skip-eda --skip-cv --skip-optuna --skip-shap
+```
 
-# Execució ràpida (sense EDA, CV ni SHAP) — ~30 segons
-python main.py --data ../Data/DatosViviendas1.csv --skip-eda --skip-cv --skip-shap
+### Execució amb Optuna (recomanada per al TFM)
+```bash
+# ~10-15 min: log1p + Optuna (10 trials ràpid) + SHAP
+python main.py --data ../Data/DatosViviendas1.csv --skip-cv --optuna-trials 10
+```
 
-# Execució amb EDA i Feature Importance — ~2-3 minuts
-python main.py --data ../Data/DatosViviendas1.csv --skip-cv
-
-# Execució completa (amb CV 5-fold i SHAP) — ~15-20 minuts
+### Execució completa
+```bash
+# ~30-60 min: tot incloent CV 5-fold, Optuna 50 trials, SHAP complet
 python main.py --data ../Data/DatosViviendas1.csv
 ```
 
-### Outputs
-Tots els resultats es guarden automàticament a:
-- `outputs/` — gràfics PNG i `metrics_summary.csv`
-- `models/` — models entrenats (`.joblib`)
-- `data/` — dataset filtrat de Catalunya (`catalunya_clean.csv`)
+### Predicció d'un habitatge nou
+```bash
+# Amb transformació log1p (per defecte, models actuals)
+python predict.py --metros 90 --habitaciones 3 --aseos 2 --terraza 1 --piscina 0 --garaje 1 --provincia Barcelona
+
+# En mode interactiu
+python predict.py
+```
+
+### Outputs generats
+- `outputs/` — tots els gràfics PNG, `metrics_summary.csv`, `optuna_best_params.csv`
+- `models/` — models serialitzats (`.joblib`), incloent els optimitzats per Optuna
+- `data/` — `catalunya_clean.csv`
 - `pipeline.log` — log complet de l'execució

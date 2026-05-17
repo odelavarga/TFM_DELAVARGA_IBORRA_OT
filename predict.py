@@ -4,6 +4,12 @@ predict.py
 Estimació del preu d'un habitatge a Catalunya a partir de les seves
 característiques, utilitzant tots els models entrenats.
 
+Nota sobre la transformació logarítmica:
+  Els models estan entrenats amb log1p(Precio) com a target.
+  Les prediccions brutes del model estan en escala logarítmica.
+  S'aplica np.expm1() per convertir-les de nou a euros reals.
+  Si s'utilitzen models entrenats sense la transformació, afegiu --no-log.
+
 Ús interactiu (demana les dades per teclat):
     python predict.py
 
@@ -19,6 +25,9 @@ característiques, utilitzant tots els models entrenats.
 
 Ús en mode batch (múltiples habitatges des d'un CSV):
     python predict.py --batch habitatges.csv
+
+Desactivar transformació logarítmica (models antics sense log1p):
+    python predict.py --no-log --metros 80 ...
 """
 
 import argparse
@@ -187,18 +196,37 @@ def build_feature_vector(params: dict) -> pd.DataFrame:
     return pd.DataFrame([values], columns=feature_names)
 
 
-def predict_all_models(models: dict, X: pd.DataFrame) -> pd.DataFrame:
+def predict_all_models(models: dict, X: pd.DataFrame,
+                        log_transform: bool = True) -> pd.DataFrame:
     """
     Fa la predicció amb tots els models i retorna un DataFrame de resultats.
 
+    Transformació logarítmica inversa:
+      Si log_transform=True (per defecte), aplica np.expm1() a les prediccions
+      brutes del model per convertir-les de l'escala log1p a euros reals.
+      Aquesta és la transformació inversa de np.log1p() aplicada durant
+      l'entrenament a main.py.
+
+    Parameters
+    ----------
+    models : dict {nom: model entrenat}
+    X : pd.DataFrame — vector de features
+    log_transform : bool
+        Si True, aplica np.expm1() per obtenir euros. Per defecte: True.
+
     Returns
     -------
-    pd.DataFrame amb columnes: Model, Preu_Estimat, Diferencia_vs_Millor
+    pd.DataFrame amb columnes: Model, Preu_Estimat, Diferencia_vs_Mediana, Diferencia_pct
     """
     results = {}
     for name, model in models.items():
         try:
-            pred = float(model.predict(X)[0])
+            pred_raw = float(model.predict(X)[0])
+            if log_transform:
+                # Transformació inversa: expm1(log1p(x)) = x
+                pred = float(np.expm1(pred_raw))
+            else:
+                pred = pred_raw
             pred = max(pred, 0)  # No pot ser negatiu
             results[name] = pred
         except Exception as e:
@@ -216,7 +244,8 @@ def predict_all_models(models: dict, X: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def print_results(results_df: pd.DataFrame, params: dict):
+def print_results(results_df: pd.DataFrame, params: dict,
+                  log_transform: bool = True):
     """Imprimeix els resultats de forma llegible."""
     print("\n" + "=" * 60)
     print("  ESTIMACIO DEL PREU DE L'HABITATGE")
@@ -234,6 +263,7 @@ def print_results(results_df: pd.DataFrame, params: dict):
     print(f"  Latitud       : {params.get('latitud', 41.39)}")
     print(f"  Longitud      : {params.get('longitud', 2.17)}")
     print(f"  Any/Mes       : {params.get('anyo', 2023)}/{params.get('mes', 6)}")
+    print(f"  Transformacio expm1: {'Si (log1p entrenat)' if log_transform else 'No'}")
 
     print("\nPrediccions per model:")
     print(f"  {'Model':<22} {'Preu Estimat':>14}  {'Dif. vs Mediana':>16}")
@@ -426,15 +456,30 @@ def parse_args():
     parser.add_argument("--input", type=str, help="Fitxer JSON amb les caracteristiques")
     parser.add_argument("--batch", type=str, help="Fitxer CSV amb multiples habitatges")
     parser.add_argument("--no-plot", action="store_true", help="No generar grafics")
+    parser.add_argument(
+        "--no-log",
+        action="store_true",
+        help=(
+            "Desactivar transformació expm1. "
+            "Usar NOMÉS per a models entrenats sense log1p (versió antiga)."
+        ),
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
 
+    # Transformació logarítmica inversa activada per defecte
+    # (els models nous s'entrenen amb log1p; cal expm1 per obtenir euros)
+    log_transform = not args.no_log
+
     logger.info("Carregant models entrenats...")
     models = load_models()
     logger.info(f"  {len(models)} models carregats: {list(models.keys())}")
+    logger.info(
+        f"  Transformació expm1 (log1p -> euros): {'SÍ' if log_transform else 'NO'}"
+    )
 
     # ── Mode batch ───────────────────────────────────────────────────────────
     if args.batch:
@@ -447,9 +492,10 @@ def main():
             params = row.to_dict()
             label = params.pop("label", f"Habitatge {i+1}")
             X = build_feature_vector(params)
-            results_df = predict_all_models(models, X)
+            results_df = predict_all_models(models, X, log_transform=log_transform)
             all_results.append((label, results_df))
-            print_results(results_df, {**params, "label": label})
+            print_results(results_df, {**params, "label": label},
+                          log_transform=log_transform)
 
             # Afegir a la taula resum
             for _, r in results_df.iterrows():
@@ -481,7 +527,7 @@ def main():
     # ── Mode arguments de línia de comandes ──────────────────────────────────
     elif args.metros is not None:
         params = {k: v for k, v in vars(args).items()
-                  if v is not None and k not in ("input", "batch", "no_plot")}
+                  if v is not None and k not in ("input", "batch", "no_plot", "no_log")}
 
     # ── Mode interactiu ──────────────────────────────────────────────────────
     else:
@@ -493,10 +539,10 @@ def main():
     logger.info(f"  Features: {X.to_dict(orient='records')[0]}")
 
     logger.info("Calculant prediccions...")
-    results_df = predict_all_models(models, X)
+    results_df = predict_all_models(models, X, log_transform=log_transform)
 
     # ── Resultats ────────────────────────────────────────────────────────────
-    print_results(results_df, params)
+    print_results(results_df, params, log_transform=log_transform)
 
     # ── Guardar CSV ──────────────────────────────────────────────────────────
     os.makedirs(OUTPUTS_DIR, exist_ok=True)

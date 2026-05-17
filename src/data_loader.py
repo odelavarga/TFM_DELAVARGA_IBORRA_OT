@@ -17,7 +17,7 @@ COLS_TO_DROP = [
     "URL",            # no predictiva
     "URL_Cliente",    # no predictiva
     "ID_Cliente",     # identificador intern
-    "Caracteristicas",# text lliure, no estructurat
+    "Inmueble",       # tots son "Flat"
     "Precision",      # metadada de geocodificació
     "CMUN", "CPRO", "CCA", "CUDIS",  # codis numèrics redundants amb NPRO/NMUN
 ]
@@ -106,6 +106,7 @@ def load_and_filter(filepath: str, save_path: str = None) -> pd.DataFrame:
     df = load_raw_data(filepath)
     df = filter_catalunya(df)
     df = drop_unused_columns(df)
+    df = df.rename(columns={"Caracteristicas": "Inmueble"})
 
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
