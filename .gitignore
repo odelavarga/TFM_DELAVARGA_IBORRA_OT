@@ -23,7 +23,7 @@ build/
 # Data files (massa grans per a Git)
 data/*.parquet
 data/*.xlsx
-data/DatosViviendas1.csv
+data/*.csv
 # Excepte el .gitkeep
 !data/.gitkeep
 
