@@ -21,7 +21,6 @@ build/
 *.ipynb_checkpoints
 
 # Data files (massa grans per a Git)
-data/*.csv
 data/*.parquet
 data/*.xlsx
 # Excepte el .gitkeep
@@ -34,7 +33,6 @@ models/*.json
 !models/.gitkeep
 
 # Outputs generats
-outputs/*.png
 outputs/*.pdf
 outputs/*.html
 !outputs/.gitkeep
