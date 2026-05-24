@@ -14,6 +14,12 @@ import seaborn as sns
 import os
 import logging
 
+import pyproj
+import contextily as ctx
+import geopandas as gpd
+from matplotlib.colors import Normalize
+from matplotlib.cm import ScalarMappable
+
 logger = logging.getLogger(__name__)
 
 sns.set_theme(style="whitegrid", palette="muted")
@@ -62,14 +68,33 @@ def plot_price_by_province(df: pd.DataFrame, output_dir: str):
 
 
 def plot_price_vs_metros(df: pd.DataFrame, output_dir: str):
-    """Scatter preu vs metres quadrats."""
-    sample = df.sample(min(5000, len(df)), random_state=42)
-    fig, ax = plt.subplots(figsize=FIGSIZE)
-    ax.scatter(sample["Metros"], sample["Precio"] / 1000,
-               alpha=0.3, s=10, color="steelblue")
-    ax.set_title("Preu vs Superfície")
-    ax.set_xlabel("Superfície (m²)")
-    ax.set_ylabel("Preu (milers €)")
+    # Filtra l'1% extrem de cada variable
+    q_metros = df["Metros"].quantile(0.99)
+    q_preu   = df["Precio"].quantile(0.99)
+    clean    = df[(df["Metros"] > 0) & (df["Metros"] < q_metros) &
+                  (df["Precio"] > 0) & (df["Precio"] < q_preu)]
+
+    sample = clean.sample(min(5000, len(clean)), random_state=42)
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Esquerra: filtrat sense log
+    axes[0].scatter(sample["Metros"], sample["Precio"] / 1000,
+                    alpha=0.3, s=10, color="steelblue")
+    axes[0].set_title("Filtrat (sense log)")
+    axes[0].set_xlabel("Superfície (m²)")
+    axes[0].set_ylabel("Preu (milers €)")
+
+    # Dreta: escala log (revela l'estructura)
+    axes[1].scatter(sample["Metros"], sample["Precio"] / 1000,
+                    alpha=0.3, s=10, color="steelblue")
+    axes[1].set_xscale("log")
+    axes[1].set_yscale("log")
+    axes[1].set_title("Escala logarítmica")
+    axes[1].set_xlabel("Superfície (m²)")
+    axes[1].set_ylabel("Preu (milers €)")
+
+    fig.tight_layout()
     _save(fig, os.path.join(output_dir, "03_price_vs_metros.png"))
 
 
@@ -120,26 +145,102 @@ def plot_amenities_impact(df: pd.DataFrame, output_dir: str):
 
 
 def plot_price_per_m2_map(df: pd.DataFrame, output_dir: str):
-    """Scatter geogràfic del preu per m² (si hi ha coordenades)."""
     if "Latitud" not in df.columns or "Longitud" not in df.columns:
         return
+
     df = df.copy()
-    df["Latitud"] = pd.to_numeric(df["Latitud"], errors="coerce")
+    df["Latitud"]  = pd.to_numeric(df["Latitud"],  errors="coerce")
     df["Longitud"] = pd.to_numeric(df["Longitud"], errors="coerce")
+
     if "Precio_m2" not in df.columns:
         df["Precio_m2"] = df["Precio"] / df["Metros"].replace(0, np.nan)
+
+    # Diagnòstic
+    print(f"Lat:  {df['Latitud'].min():.2f} – {df['Latitud'].max():.2f}")
+    print(f"Lon:  {df['Longitud'].min():.2f} – {df['Longitud'].max():.2f}")
+
+    # Filtre bbox Catalunya completa
     sample = df.dropna(subset=["Latitud", "Longitud", "Precio_m2"])
-    sample = sample[sample["Latitud"].between(40, 43) & sample["Longitud"].between(0, 4)]
+    sample = sample[
+        sample["Latitud"].between(40.5, 42.9) &
+        sample["Longitud"].between(0.15, 3.35)
+    ]
+
+    # Filtre outliers preu
+    p99 = sample["Precio_m2"].quantile(0.99)
+    sample = sample[sample["Precio_m2"] < p99]
     sample = sample.sample(min(8000, len(sample)), random_state=42)
-    fig, ax = plt.subplots(figsize=(10, 8))
-    sc = ax.scatter(sample["Longitud"], sample["Latitud"],
-                    c=sample["Precio_m2"], cmap="YlOrRd",
-                    s=5, alpha=0.5, vmin=500, vmax=6000)
-    plt.colorbar(sc, ax=ax, label="€/m²")
-    ax.set_title("Distribució Geogràfica del Preu per m² a Catalunya")
-    ax.set_xlabel("Longitud")
-    ax.set_ylabel("Latitud")
+
+    if sample.empty:
+        print("⚠️  Cap punt dins del bbox de Catalunya — revisa les coordenades!")
+        return
+
+    # Diagnòstic Barcelona
+    bcn = sample[sample["Longitud"].between(1.9, 2.5) & sample["Latitud"].between(41.2, 41.6)]
+    print(f"Punts zona Barcelona: {len(bcn)}")
+
+    # Convertir a GeoDataFrame i projectar a Web Mercator
+    gdf = gpd.GeoDataFrame(
+        sample,
+        geometry=gpd.points_from_xy(sample["Longitud"], sample["Latitud"]),
+        crs="EPSG:4326"
+    ).to_crs("EPSG:3857")
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+
+    norm = Normalize(vmin=sample["Precio_m2"].quantile(0.05),
+                     vmax=sample["Precio_m2"].quantile(0.95))
+
+    gdf.plot(
+        ax=ax,
+        column="Precio_m2",
+        cmap="YlOrRd",
+        norm=norm,
+        markersize=8,
+        alpha=0.6,
+        legend=False
+    )
+
+    # Forçar el viewport a tot Catalunya
+    transformer = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+    x_min, y_min = transformer.transform(0.15, 40.5)
+    x_max, y_max = transformer.transform(3.35, 42.9)
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
+
+    # Mapa base
+    ctx.add_basemap(ax, source=ctx.providers.CartoDB.Positron, zoom=8)
+
+    sm = ScalarMappable(cmap="YlOrRd", norm=norm)
+    sm.set_array([])
+    plt.colorbar(sm, ax=ax, label="€/m²", fraction=0.03, pad=0.04)
+
+    ax.set_title("Distribució Geogràfica del Preu per m² a Catalunya", fontsize=14)
+    ax.set_axis_off()
+
     _save(fig, os.path.join(output_dir, "07_price_map.png"))
+
+# def plot_price_per_m2_map(df: pd.DataFrame, output_dir: str):
+#     """Scatter geogràfic del preu per m² (si hi ha coordenades)."""
+#     if "Latitud" not in df.columns or "Longitud" not in df.columns:
+#         return
+#     df = df.copy()
+#     df["Latitud"] = pd.to_numeric(df["Latitud"], errors="coerce")
+#     df["Longitud"] = pd.to_numeric(df["Longitud"], errors="coerce")
+#     if "Precio_m2" not in df.columns:
+#         df["Precio_m2"] = df["Precio"] / df["Metros"].replace(0, np.nan)
+#     sample = df.dropna(subset=["Latitud", "Longitud", "Precio_m2"])
+#     sample = sample[sample["Latitud"].between(40, 43) & sample["Longitud"].between(0, 4)]
+#     sample = sample.sample(min(8000, len(sample)), random_state=42)
+#     fig, ax = plt.subplots(figsize=(10, 8))
+#     sc = ax.scatter(sample["Longitud"], sample["Latitud"],
+#                     c=sample["Precio_m2"], cmap="YlOrRd",
+#                     s=5, alpha=0.5, vmin=500, vmax=6000)
+#     plt.colorbar(sc, ax=ax, label="€/m²")
+#     ax.set_title("Distribució Geogràfica del Preu per m² a Catalunya")
+#     ax.set_xlabel("Longitud")
+#     ax.set_ylabel("Latitud")
+#     _save(fig, os.path.join(output_dir, "07_price_map.png"))
 
 
 def print_summary(df: pd.DataFrame):

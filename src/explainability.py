@@ -341,7 +341,7 @@ def run_explainability(trained_models: dict, X_test: pd.DataFrame,
 
 
 def _plot_combined_importance(trained_models: dict, feature_names: list,
-                               output_dir: str, top_n: int = 15):
+                              output_dir: str, top_n: int = 15):
     """
     Gràfic combinat: importàncies de tots els models basats en arbres
     en un únic heatmap per comparar quines variables coincideixen.
@@ -351,8 +351,18 @@ def _plot_combined_importance(trained_models: dict, feature_names: list,
         estimator = model
         if hasattr(model, "named_steps"):
             estimator = model.named_steps.get("model", model)
+        
         if hasattr(estimator, "feature_importances_"):
-            importance_data[name] = estimator.feature_importances_
+            importances = estimator.feature_importances_
+            
+            # --- MODIFICACIÓ CLAU: Normalització ---
+            # Dividim per la suma total perquè tots els valors estiguin entre 0 i 1
+            total_importance = importances.sum()
+            if total_importance > 0:
+                importances = importances / total_importance
+            # ---------------------------------------
+            
+            importance_data[name] = importances
 
     if len(importance_data) < 2:
         return
@@ -373,10 +383,12 @@ def _plot_combined_importance(trained_models: dict, feature_names: list,
             cmap="YlOrRd",
             ax=ax,
             linewidths=0.5,
+            # Afegim vmin i vmax per assegurar que l'escala de colors sigui idèntica
+            vmin=0.0, vmax=import_df.max().max() 
         )
         ax.set_title(
             f"Comparació d'Importàncies de Variables — Top {top_n}\n"
-            "(Valors normalitzats per model)"
+            "(Valors normalitzats per model en percentatge [0-1])"
         )
         ax.set_ylabel("Variable")
         ax.set_xlabel("Model")

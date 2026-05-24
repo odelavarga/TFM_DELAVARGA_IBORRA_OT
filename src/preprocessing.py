@@ -168,7 +168,7 @@ def log_outlier_stats(df: pd.DataFrame):
 
 
 def fill_missing(df: pd.DataFrame) -> pd.DataFrame:
-    """Imputa valors nuls."""
+    """Imputa valors nuls i elimina files sense coordenades."""
     # Numèriques: mediana
     for col in ["Habitaciones", "Aseos"]:
         if col in df.columns:
@@ -184,10 +184,11 @@ def fill_missing(df: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             df[col] = df[col].fillna("Desconegut")
 
-    # Coordenades: mediana
-    for col in ["Latitud", "Longitud"]:
-        if col in df.columns:
-            df[col] = df[col].fillna(df[col].median())
+    # Eliminar files sense coordenades
+    cols_coord = [col for col in ["Latitud", "Longitud"] if col in df.columns]
+
+    if cols_coord:
+        df = df.dropna(subset=cols_coord)
 
     return df
 
