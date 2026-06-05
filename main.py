@@ -3,21 +3,6 @@ main.py
 -------
 Pipeline principal per a la valoració immobiliària a Catalunya.
 
-Millores implementades:
-  1. Transformació logarítmica del target (np.log1p / np.expm1)
-     - Els models s'entrenen amb log1p(Precio)
-     - Les prediccions es converteixen a euros amb np.expm1()
-     - Redueix dràsticament el MAPE i la influència d'outliers
-  2. Cerca d'hiperparàmetres amb Optuna (cerca bayesiana TPE)
-     - Optimitza XGBoost, LightGBM i RandomForest
-     - 50 trials per model, CV 3-fold intern
-  3. XAI complet amb SHAP
-     - Summary (beeswarm), Bar, Dependence plots, Waterfall
-     - Feature Importance intrínseca + heatmap combinat
-  4. Eliminació d'outliers en dos passos
-     - Rang fix (regles de negoci)
-     - IQR estadístic (k=3, criteri Tukey estricte)
-
 Ús:
     python main.py --data ../Data/DatosViviendas1.csv
     python main.py --data ../Data/DatosViviendas1.csv --skip-eda

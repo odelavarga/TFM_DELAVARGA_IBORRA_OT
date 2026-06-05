@@ -220,29 +220,6 @@ def plot_price_per_m2_map(df: pd.DataFrame, output_dir: str):
 
     _save(fig, os.path.join(output_dir, "07_price_map.png"))
 
-# def plot_price_per_m2_map(df: pd.DataFrame, output_dir: str):
-#     """Scatter geogràfic del preu per m² (si hi ha coordenades)."""
-#     if "Latitud" not in df.columns or "Longitud" not in df.columns:
-#         return
-#     df = df.copy()
-#     df["Latitud"] = pd.to_numeric(df["Latitud"], errors="coerce")
-#     df["Longitud"] = pd.to_numeric(df["Longitud"], errors="coerce")
-#     if "Precio_m2" not in df.columns:
-#         df["Precio_m2"] = df["Precio"] / df["Metros"].replace(0, np.nan)
-#     sample = df.dropna(subset=["Latitud", "Longitud", "Precio_m2"])
-#     sample = sample[sample["Latitud"].between(40, 43) & sample["Longitud"].between(0, 4)]
-#     sample = sample.sample(min(8000, len(sample)), random_state=42)
-#     fig, ax = plt.subplots(figsize=(10, 8))
-#     sc = ax.scatter(sample["Longitud"], sample["Latitud"],
-#                     c=sample["Precio_m2"], cmap="YlOrRd",
-#                     s=5, alpha=0.5, vmin=500, vmax=6000)
-#     plt.colorbar(sc, ax=ax, label="€/m²")
-#     ax.set_title("Distribució Geogràfica del Preu per m² a Catalunya")
-#     ax.set_xlabel("Longitud")
-#     ax.set_ylabel("Latitud")
-#     _save(fig, os.path.join(output_dir, "07_price_map.png"))
-
-
 def print_summary(df: pd.DataFrame):
     """Imprimeix un resum estadístic del dataset."""
     print("\n" + "="*60)

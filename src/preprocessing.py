@@ -3,12 +3,6 @@ preprocessing.py
 ----------------
 Neteja i preprocessament del dataset immobiliari de Catalunya.
 
-Inclou:
-  - Correcció de formats (lat/lon, dates)
-  - Eliminació d'outliers (rang fix + IQR estadístic)
-  - Imputació de valors nuls
-  - Enginyeria de variables (features derivades)
-  - Codificació de variables categòriques (LabelEncoder)
 """
 
 import pandas as pd

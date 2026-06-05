@@ -3,21 +3,6 @@ explainability.py
 -----------------
 Interpretabilitat dels models amb SHAP (XAI) i importància de variables.
 
-Tècniques XAI implementades:
-  1. Feature Importance intrínseca (arbres: Gini/Gain impurity)
-  2. SHAP TreeExplainer — summary plot (beeswarm) per veure distribució
-     i direcció d'impacte de cada variable
-  3. SHAP Bar plot — importància global (|SHAP| mitja)
-  4. SHAP Dependence plots — relació entre variable i impacte SHAP
-  5. SHAP Waterfall plot — explicació d'una predicció individual
-  6. SHAP Force plot — explicació local en HTML
-
-Nota sobre log_transform:
-  Si els models estan entrenats amb log1p(Precio), els valors SHAP
-  estan en escala logarítmica. Això és consistent: els valors SHAP
-  indiquen la contribució de cada feature al log1p(Precio) predit.
-  A la pràctica la interpretació és equivalent (signe i importància relativa
-  es conserven), però les magnituds no corresponen directament a euros.
 """
 
 import pandas as pd
