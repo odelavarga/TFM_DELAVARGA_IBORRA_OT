@@ -145,16 +145,6 @@ Els resultats es guarden a la carpeta `outputs/`:
 
 ---
 
-## Referències principals
-
-- Valier, A. (2020). Who performs better? AVMs vs hedonic models. *JPIF*, 38(3).
-- Yazdani, M. (2021). Machine learning, deep learning, and hedonic methods for real estate price prediction. *arXiv*.
-- Sharma et al. (2024). An optimal house price prediction algorithm: XGBoost. *Analytics*, 3(1).
-- Tchuente, D. (2024). Real estate AVM with explainable AI based on Shapley values. *JREFE*.
-- Crespo et al. (2025). A systematic review of ML in house pricing prediction. *Computational Economics*.
-
----
-
 ## Llicència
 
 Aquest projecte és part d'un Treball Final de Màster acadèmic. Llicència CC BY-NC 3.0 ES.
